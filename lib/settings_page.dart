@@ -1,50 +1,15 @@
 import 'package:flutter/material.dart';
-import 'dart:async';
-import 'services/thingspeak_service.dart';
-import 'models/temperature_humidity.dart';
+import 'home_page.dart';
 import 'control_page.dart';
-import 'settings_page.dart';
 import 'login_page.dart';
 
-class HomePage extends StatefulWidget {
+class SettingsPage extends StatefulWidget {
   @override
-  _HomePageState createState() => _HomePageState();
+  _SettingsPageState createState() => _SettingsPageState();
 }
 
-class _HomePageState extends State<HomePage> {
-  late ThingSpeakService _thingSpeakService;
-  TemperatureHumidity? _data;
-  bool _isLoading = true;
-  int _selectedIndex = 0;
-
-  @override
-  void initState() {
-    super.initState();
-    _thingSpeakService = ThingSpeakService(
-      channelId: '2342037',
-      readApiKey: 'FTZ54ZF6G1J1BDPY',
-    );
-    _fetchData();
-    Timer.periodic(Duration(seconds: 30), (timer) => _fetchData());
-  }
-
-  Future<void> _fetchData() async {
-    try {
-      final data = await _thingSpeakService.fetchData();
-      setState(() {
-        _data = TemperatureHumidity(
-          temperature: data['temperature'],
-          humidity: data['humidity'],
-        );
-        _isLoading = false;
-      });
-    } catch (e) {
-      setState(() {
-        _isLoading = false;
-      });
-      print('Error fetching data: $e');
-    }
-  }
+class _SettingsPageState extends State<SettingsPage> {
+  int _selectedIndex = 1;
 
   void _onItemTapped(int index) {
     setState(() {
@@ -73,7 +38,7 @@ class _HomePageState extends State<HomePage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text('Agri-IoT Farm'),
+        title: Text('Settings'),
       ),
       drawer: Drawer(
         child: ListView(
@@ -136,41 +101,10 @@ class _HomePageState extends State<HomePage> {
         ),
       ),
       body: Center(
-        child: _isLoading
-            ? CircularProgressIndicator()
-            : _data != null
-            ? Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: <Widget>[
-            Container(
-              padding: EdgeInsets.all(16.0),
-              decoration: BoxDecoration(
-                color: Colors.lightBlueAccent,
-                borderRadius: BorderRadius.circular(10),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black12,
-                    blurRadius: 10,
-                  ),
-                ],
-              ),
-              child: Column(
-                children: [
-                  Text(
-                    'Temperature: ${_data!.temperature} °C',
-                    style: TextStyle(fontSize: 24, color: Colors.white),
-                  ),
-                  SizedBox(height: 16),
-                  Text(
-                    'Humidity: ${_data!.humidity} %',
-                    style: TextStyle(fontSize: 24, color: Colors.white),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        )
-            : Text('Failed to load data'),
+        child: Text(
+          'Settings Page',
+          style: TextStyle(fontSize: 24),
+        ),
       ),
       bottomNavigationBar: BottomNavigationBar(
         items: const <BottomNavigationBarItem>[

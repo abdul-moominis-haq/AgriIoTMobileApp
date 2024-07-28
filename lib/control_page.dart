@@ -1,48 +1,39 @@
 import 'package:flutter/material.dart';
-import 'dart:async';
-import 'services/thingspeak_service.dart';
-import 'models/temperature_humidity.dart';
-import 'control_page.dart';
+import 'package:http/http.dart' as http;
+import 'home_page.dart';
 import 'settings_page.dart';
 import 'login_page.dart';
 
-class HomePage extends StatefulWidget {
+class ControlPage extends StatefulWidget {
   @override
-  _HomePageState createState() => _HomePageState();
+  _ControlPageState createState() => _ControlPageState();
 }
 
-class _HomePageState extends State<HomePage> {
-  late ThingSpeakService _thingSpeakService;
-  TemperatureHumidity? _data;
-  bool _isLoading = true;
-  int _selectedIndex = 0;
+class _ControlPageState extends State<ControlPage> {
+  bool _isDeviceOn = false;
+  bool _isLoading = false;
+  int _selectedIndex = 2;
 
-  @override
-  void initState() {
-    super.initState();
-    _thingSpeakService = ThingSpeakService(
-      channelId: '2342037',
-      readApiKey: 'FTZ54ZF6G1J1BDPY',
+  void _toggleDevice(bool turnOn) async {
+    setState(() {
+      _isLoading = true;
+    });
+
+    final response = await http.post(
+      Uri.parse('http://YOUR_DEVICE_IP/control'),
+      body: {'status': turnOn ? 'on' : 'off'},
     );
-    _fetchData();
-    Timer.periodic(Duration(seconds: 30), (timer) => _fetchData());
-  }
 
-  Future<void> _fetchData() async {
-    try {
-      final data = await _thingSpeakService.fetchData();
+    if (response.statusCode == 200) {
       setState(() {
-        _data = TemperatureHumidity(
-          temperature: data['temperature'],
-          humidity: data['humidity'],
-        );
+        _isDeviceOn = turnOn;
         _isLoading = false;
       });
-    } catch (e) {
+    } else {
       setState(() {
         _isLoading = false;
       });
-      print('Error fetching data: $e');
+      print('Failed to send command');
     }
   }
 
@@ -73,7 +64,7 @@ class _HomePageState extends State<HomePage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text('Agri-IoT Farm'),
+        title: Text('Control Device'),
       ),
       drawer: Drawer(
         child: ListView(
@@ -138,39 +129,25 @@ class _HomePageState extends State<HomePage> {
       body: Center(
         child: _isLoading
             ? CircularProgressIndicator()
-            : _data != null
-            ? Column(
+            : Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: <Widget>[
-            Container(
-              padding: EdgeInsets.all(16.0),
-              decoration: BoxDecoration(
-                color: Colors.lightBlueAccent,
-                borderRadius: BorderRadius.circular(10),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black12,
-                    blurRadius: 10,
-                  ),
-                ],
-              ),
-              child: Column(
-                children: [
-                  Text(
-                    'Temperature: ${_data!.temperature} °C',
-                    style: TextStyle(fontSize: 24, color: Colors.white),
-                  ),
-                  SizedBox(height: 16),
-                  Text(
-                    'Humidity: ${_data!.humidity} %',
-                    style: TextStyle(fontSize: 24, color: Colors.white),
-                  ),
-                ],
-              ),
+            Text(
+              _isDeviceOn ? 'Device is ON' : 'Device is OFF',
+              style: TextStyle(fontSize: 24),
+            ),
+            SizedBox(height: 20),
+            ElevatedButton(
+              onPressed: () => _toggleDevice(true),
+              child: Text('Turn ON'),
+            ),
+            SizedBox(height: 10),
+            ElevatedButton(
+              onPressed: () => _toggleDevice(false),
+              child: Text('Turn OFF'),
             ),
           ],
-        )
-            : Text('Failed to load data'),
+        ),
       ),
       bottomNavigationBar: BottomNavigationBar(
         items: const <BottomNavigationBarItem>[
