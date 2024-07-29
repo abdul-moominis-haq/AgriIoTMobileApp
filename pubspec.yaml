@@ -30,10 +30,10 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  firebase_core: ^2.3.0
-  firebase_auth: ^4.2.0
-  cloud_firestore: ^4.2.0
-  firebase_database: ^9.0.20
+  http: ^0.13.5  # Use the latest version available
+  fl_chart: ^0.40.0
+
+
 
 
 
