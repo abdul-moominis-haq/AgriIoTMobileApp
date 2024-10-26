@@ -5,15 +5,42 @@ import 'settings_page.dart';
 import 'login_page.dart';
 
 class ControlPage extends StatefulWidget {
+  const ControlPage({super.key});
+
   @override
   _ControlPageState createState() => _ControlPageState();
 }
 
-class _ControlPageState extends State<ControlPage> {
+class _ControlPageState extends State<ControlPage> with SingleTickerProviderStateMixin {
   bool _isDeviceOn = false;
   bool _isLoading = false;
   int _selectedIndex = 2;
 
+  // Animation controller for button scaling
+  late AnimationController _controller;
+  late Animation<double> _scaleAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    // Initialize animation controller
+    _controller = AnimationController(
+      duration: const Duration(milliseconds: 300),
+      vsync: this,
+    );
+    _scaleAnimation = Tween<double>(begin: 1.0, end: 1.1).animate(CurvedAnimation(
+      parent: _controller,
+      curve: Curves.easeInOut,
+    ));
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  // Toggle device state with animation and http request
   void _toggleDevice(bool turnOn) async {
     setState(() {
       _isLoading = true;
@@ -37,6 +64,7 @@ class _ControlPageState extends State<ControlPage> {
     }
   }
 
+  // Handle navigation between pages
   void _onItemTapped(int index) {
     setState(() {
       _selectedIndex = index;
@@ -45,17 +73,17 @@ class _ControlPageState extends State<ControlPage> {
     if (index == 0) {
       Navigator.pushReplacement(
         context,
-        MaterialPageRoute(builder: (context) => HomePage()),
+        MaterialPageRoute(builder: (context) => const HomePage()),
       );
     } else if (index == 1) {
       Navigator.push(
         context,
-        MaterialPageRoute(builder: (context) => SettingsPage()),
+        MaterialPageRoute(builder: (context) => const SettingsPage()),
       );
     } else if (index == 2) {
       Navigator.push(
         context,
-        MaterialPageRoute(builder: (context) => ControlPage()),
+        MaterialPageRoute(builder: (context) => const ControlPage()),
       );
     }
   }
@@ -64,13 +92,14 @@ class _ControlPageState extends State<ControlPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text('Control Device'),
+        title: const Text('Control Device'),
+        backgroundColor: Colors.green,
       ),
       drawer: Drawer(
         child: ListView(
           padding: EdgeInsets.zero,
           children: <Widget>[
-            DrawerHeader(
+            const DrawerHeader(
               decoration: BoxDecoration(
                 color: Colors.green,
               ),
@@ -83,43 +112,43 @@ class _ControlPageState extends State<ControlPage> {
               ),
             ),
             ListTile(
-              leading: Icon(Icons.home),
-              title: Text('Home'),
+              leading: const Icon(Icons.home),
+              title: const Text('Home'),
               onTap: () {
                 Navigator.pushReplacement(
                   context,
-                  MaterialPageRoute(builder: (context) => HomePage()),
+                  MaterialPageRoute(builder: (context) => const HomePage()),
                 );
               },
             ),
             ListTile(
-              leading: Icon(Icons.settings),
-              title: Text('Settings'),
+              leading: const Icon(Icons.graphic_eq),
+              title: const Text('Graphs'),
               onTap: () {
                 Navigator.push(
                   context,
-                  MaterialPageRoute(builder: (context) => SettingsPage()),
+                  MaterialPageRoute(builder: (context) => const SettingsPage()),
                 );
               },
             ),
             ListTile(
-              leading: Icon(Icons.power_settings_new),
-              title: Text('Control Device'),
+              leading: const Icon(Icons.power_settings_new),
+              title: const Text('Control Device'),
               onTap: () {
                 Navigator.push(
                   context,
-                  MaterialPageRoute(builder: (context) => ControlPage()),
+                  MaterialPageRoute(builder: (context) => const ControlPage()),
                 );
               },
             ),
             ListTile(
-              leading: Icon(Icons.logout),
-              title: Text('Logout'),
+              leading: const Icon(Icons.logout),
+              title: const Text('Logout'),
               onTap: () {
                 Navigator.pop(context);
                 Navigator.pushReplacement(
                   context,
-                  MaterialPageRoute(builder: (context) => LoginPage()),
+                  MaterialPageRoute(builder: (context) => const LoginPage()),
                 );
               },
             ),
@@ -128,23 +157,58 @@ class _ControlPageState extends State<ControlPage> {
       ),
       body: Center(
         child: _isLoading
-            ? CircularProgressIndicator()
+            ? const CircularProgressIndicator()
             : Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: <Widget>[
             Text(
               _isDeviceOn ? 'Device is ON' : 'Device is OFF',
-              style: TextStyle(fontSize: 24),
+              style: const TextStyle(fontSize: 30),
             ),
-            SizedBox(height: 20),
-            ElevatedButton(
-              onPressed: () => _toggleDevice(true),
-              child: Text('Turn ON'),
+            const SizedBox(height: 30),
+
+            // Animated Turn ON button
+            GestureDetector(
+              onTapDown: (_) => _controller.forward(),
+              onTapUp: (_) => _controller.reverse(),
+              onTap: () => _toggleDevice(true),
+              child: ScaleTransition(
+                scale: _scaleAnimation,
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    foregroundColor: Colors.white, backgroundColor: Colors.green,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(20.0),
+                    ),
+                    elevation: 10,
+                  ),
+                  child: const Text('Turn ON'),
+                  onPressed: () => _toggleDevice(true),
+                ),
+              ),
             ),
-            SizedBox(height: 10),
-            ElevatedButton(
-              onPressed: () => _toggleDevice(false),
-              child: Text('Turn OFF'),
+
+            const SizedBox(height: 30),
+
+            // Animated Turn OFF button
+            GestureDetector(
+              onTapDown: (_) => _controller.forward(),
+              onTapUp: (_) => _controller.reverse(),
+              onTap: () => _toggleDevice(false),
+              child: ScaleTransition(
+                scale: _scaleAnimation,
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    foregroundColor: Colors.white, backgroundColor: Colors.red,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(20.0),
+                    ),
+                    elevation: 10,
+                  ),
+                  child: const Text('Turn OFF'),
+                  onPressed: () => _toggleDevice(false),
+                ),
+              ),
             ),
           ],
         ),
@@ -156,8 +220,8 @@ class _ControlPageState extends State<ControlPage> {
             label: 'Home',
           ),
           BottomNavigationBarItem(
-            icon: Icon(Icons.settings),
-            label: 'Settings',
+            icon: Icon(Icons.graphic_eq_sharp),
+            label: 'Graph',
           ),
           BottomNavigationBarItem(
             icon: Icon(Icons.power_settings_new),

@@ -1,20 +1,22 @@
 import 'package:flutter/material.dart';
 import 'dart:async';
-import 'package:fl_chart/fl_chart.dart' show BarAreaData, FlBorderData, FlGridData, FlSpot, FlTitlesData, LineChart, LineChartBarData, LineChartData;
+import 'package:shared_preferences/shared_preferences.dart'; // Import shared_preferences
 import 'services/thingspeak_service.dart';
-import 'models/temperature_humidity.dart' show TemperatureHumidity;
-import 'control_page.dart' show ControlPage;
+import 'models/temperature_humidity.dart';
+import 'control_page.dart';
 import 'settings_page.dart';
-import 'package:agri_iot_app/login_page.dart' show LoginPage;
+import 'login_page.dart';
 
 class HomePage extends StatefulWidget {
+  const HomePage({super.key});
+
   @override
   _HomePageState createState() => _HomePageState();
 }
 
 class _HomePageState extends State<HomePage> {
   late ThingSpeakService _thingSpeakService;
-  List<TemperatureHumidity> _dataList = [];
+  List<TemperatureHumidity> _dataList = []; // Changed from final to allow modification
   bool _isLoading = true;
   int _selectedIndex = 0;
 
@@ -25,26 +27,63 @@ class _HomePageState extends State<HomePage> {
       channelId: '2342037',
       readApiKey: 'FTZ54ZF6G1J1BDPY',
     );
+    _loadData(); // Load saved data
     _fetchData();
-    Timer.periodic(Duration(seconds: 30), (timer) => _fetchData());
+    Timer.periodic(const Duration(seconds: 30), (timer) => _fetchData());
+  }
+
+  Future<void> _loadData() async {
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    List<String>? savedData = prefs.getStringList('temperature_humidity_data');
+
+    if (savedData != null) {
+      _dataList = savedData
+          .map((data) {
+        final parts = data.split(',');
+        return TemperatureHumidity(
+          temperature: double.parse(parts[0]),
+          humidity: double.parse(parts[1]),
+          timestamp: DateTime.parse(parts[2]),
+        );
+      })
+          .toList();
+    }
+
+    setState(() {
+      _isLoading = false; // Set loading to false after loading data
+    });
   }
 
   Future<void> _fetchData() async {
     try {
       final data = await _thingSpeakService.fetchData();
+      TemperatureHumidity newEntry = TemperatureHumidity(
+        temperature: data['temperature'],
+        humidity: data['humidity'],
+        timestamp: DateTime.now(),
+      );
+
       setState(() {
-        _dataList.add(TemperatureHumidity(
-          temperature: data['temperature'],
-          humidity: data['humidity'],
-        ));
+        _dataList.add(newEntry);
         _isLoading = false;
       });
+
+      // Save the updated data list to SharedPreferences
+      _saveData();
     } catch (e) {
       setState(() {
         _isLoading = false;
       });
       print('Error fetching data: $e');
     }
+  }
+
+  Future<void> _saveData() async {
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    List<String> dataToSave = _dataList.map((entry) {
+      return '${entry.temperature},${entry.humidity},${entry.timestamp.toIso8601String()}';
+    }).toList();
+    await prefs.setStringList('temperature_humidity_data', dataToSave);
   }
 
   void _onItemTapped(int index) {
@@ -55,35 +94,57 @@ class _HomePageState extends State<HomePage> {
     if (index == 0) {
       Navigator.pushReplacement(
         context,
-        MaterialPageRoute(builder: (context) => HomePage()),
+        MaterialPageRoute(builder: (context) => const HomePage()),
       );
     } else if (index == 1) {
       Navigator.push(
         context,
-        MaterialPageRoute(builder: (context) => SettingsPage()),
+        MaterialPageRoute(builder: (context) => const SettingsPage()),
       );
     } else if (index == 2) {
       Navigator.push(
         context,
-        MaterialPageRoute(builder: (context) => ControlPage()),
+        MaterialPageRoute(builder: (context) => const ControlPage()),
       );
     }
   }
 
-  List<FlSpot> _createTemperatureSpots() {
-    return _dataList
-        .asMap()
-        .entries
-        .map((entry) => FlSpot(entry.key.toDouble(), entry.value.temperature))
-        .toList();
+  // Function to calculate average temperature and humidity
+  double _calculateAverage(List<TemperatureHumidity> data, bool isTemperature) {
+    if (data.isEmpty) return 0.0;
+    double total = data.fold(0, (sum, item) => sum + (isTemperature ? item.temperature : item.humidity));
+    return total / data.length;
+  }
+
+  // Function to calculate max value
+  double _calculateMax(List<TemperatureHumidity> data, bool isTemperature) {
+    if (data.isEmpty) return 0.0;
+    return isTemperature
+        ? data.map((item) => item.temperature).reduce((a, b) => a > b ? a : b)
+        : data.map((item) => item.humidity).reduce((a, b) => a > b ? a : b);
+  }
+
+  // Function to calculate min value
+  double _calculateMin(List<TemperatureHumidity> data, bool isTemperature) {
+    if (data.isEmpty) return 0.0;
+    return isTemperature
+        ? data.map((item) => item.temperature).reduce((a, b) => a < b ? a : b)
+        : data.map((item) => item.humidity).reduce((a, b) => a < b ? a : b);
   }
 
   @override
   Widget build(BuildContext context) {
+    double averageTemperature = _calculateAverage(_dataList, true);
+    double averageHumidity = _calculateAverage(_dataList, false);
+    double maxTemperature = _calculateMax(_dataList, true);
+    double minTemperature = _calculateMin(_dataList, true);
+    double maxHumidity = _calculateMax(_dataList, false);
+    double minHumidity = _calculateMin(_dataList, false);
+
     return Scaffold(
       appBar: AppBar(
-        title: Text('Agri-IoT Farm'),
-        backgroundColor: Colors.green[700],
+        title: const Text('Agri-IoT Farm'),
+        backgroundColor: Colors.green,
       ),
       drawer: Drawer(
         child: ListView(
@@ -91,21 +152,21 @@ class _HomePageState extends State<HomePage> {
           children: <Widget>[
             DrawerHeader(
               decoration: BoxDecoration(
-                color: Colors.green[700],
+                color: Colors.green.shade900,
               ),
-              child: Column(
+              child: const Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Icon(
                     Icons.agriculture,
-                    color: Colors.white,
+                    color: Colors.lightGreen,
                     size: 40,
                   ),
                   SizedBox(height: 10),
                   Text(
                     'Menu',
                     style: TextStyle(
-                      color: Colors.white,
+                      color: Colors.redAccent,
                       fontSize: 24,
                     ),
                   ),
@@ -113,43 +174,43 @@ class _HomePageState extends State<HomePage> {
               ),
             ),
             ListTile(
-              leading: Icon(Icons.home),
-              title: Text('Home'),
+              leading: const Icon(Icons.home),
+              title: const Text('Home'),
               onTap: () {
                 Navigator.pushReplacement(
                   context,
-                  MaterialPageRoute(builder: (context) => HomePage()),
+                  MaterialPageRoute(builder: (context) => const HomePage()),
                 );
               },
             ),
             ListTile(
-              leading: Icon(Icons.settings),
-              title: Text('Settings'),
+              leading: const Icon(Icons.graphic_eq),
+              title: const Text('Graphs'),
               onTap: () {
                 Navigator.push(
                   context,
-                  MaterialPageRoute(builder: (context) => SettingsPage()),
+                  MaterialPageRoute(builder: (context) => const SettingsPage()),
                 );
               },
             ),
             ListTile(
-              leading: Icon(Icons.power_settings_new),
-              title: Text('Control Device'),
+              leading: const Icon(Icons.power_settings_new),
+              title: const Text('Control Device'),
               onTap: () {
                 Navigator.push(
                   context,
-                  MaterialPageRoute(builder: (context) => ControlPage()),
+                  MaterialPageRoute(builder: (context) => const ControlPage()),
                 );
               },
             ),
             ListTile(
-              leading: Icon(Icons.logout),
-              title: Text('Logout'),
+              leading: const Icon(Icons.logout),
+              title: const Text('Logout'),
               onTap: () {
                 Navigator.pop(context);
                 Navigator.pushReplacement(
                   context,
-                  MaterialPageRoute(builder: (context) => LoginPage()),
+                  MaterialPageRoute(builder: (context) => const LoginPage()),
                 );
               },
             ),
@@ -158,66 +219,83 @@ class _HomePageState extends State<HomePage> {
       ),
       body: Center(
         child: _isLoading
-            ? CircularProgressIndicator()
+            ? const CircularProgressIndicator()
             : Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: <Widget>[
-            Container(
-              padding: EdgeInsets.all(16.0),
-              margin: EdgeInsets.symmetric(horizontal: 20.0),
-              decoration: BoxDecoration(
-                color: Colors.green[100],
-                borderRadius: BorderRadius.circular(10),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black12,
-                    blurRadius: 10,
-                  ),
-                ],
-              ),
-              child: Column(
-                children: [
-                  Text(
-                    'Temperature: ${_dataList.isNotEmpty ? _dataList.last.temperature : 'N/A'} °C',
-                    style: TextStyle(fontSize: 24, color: Colors.green[900]),
-                  ),
-                  SizedBox(height: 16),
-                  Text(
-                    'Humidity: ${_dataList.isNotEmpty ? _dataList.last.humidity : 'N/A'} %',
-                    style: TextStyle(fontSize: 24, color: Colors.green[900]),
-                  ),
-                  SizedBox(height: 16),
-                  _dataList.isNotEmpty
-                      ? SizedBox(
-                    height: 200,
-                    child: LineChart(
-                      LineChartData(
-                        gridData: FlGridData(show: false),
-                        titlesData: FlTitlesData(show: false),
-                        borderData: FlBorderData(
-                          show: true,
-                          border: Border.all(color: Colors.grey),
-                        ),
-                        minX: 0,
-                        maxX: _dataList.length.toDouble(),
-                        minY: 0,
-                        maxY: 40, // assuming temperature range
-                        lineBarsData: [
-                          LineChartBarData(
-                            spots: _createTemperatureSpots(),
-                            isCurved: true,
-                            colors: [Colors.green],
-                            barWidth: 3,
-                            belowBarData: BarAreaData(show: false),
-                          ),
-                        ],
-                      ),
-                    ),
-                  )
-                      : Text('No temperature data available.'),
-                ],
-              ),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: [
+                _buildAnimatedBox(
+                  'Temperature',
+                  _dataList.isNotEmpty ? _dataList.last.temperature : 0,
+                  '°C',
+                  Colors.green[700]!,
+                ),
+                _buildAnimatedBox(
+                  'Humidity',
+                  _dataList.isNotEmpty ? _dataList.last.humidity : 0,
+                  '%',
+                  Colors.blue[700]!,
+                ),
+              ],
             ),
+            const SizedBox(height: 20),
+            // Display average, max, and min values in animated boxes
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: [
+                _buildAnimatedBox(
+                  'Avg Temp',
+                  averageTemperature,
+                  '°C',
+                  Colors.orange[700]!,
+                ),
+                _buildAnimatedBox(
+                  'Avg Humidity',
+                  averageHumidity,
+                  '%',
+                  Colors.orange[700]!,
+                ),
+              ],
+            ),
+            const SizedBox(height: 20),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: [
+                _buildAnimatedBox(
+                  'Max Temp',
+                  maxTemperature,
+                  '°C',
+                  Colors.red[700]!,
+                ),
+                _buildAnimatedBox(
+                  'Min Temp',
+                  minTemperature,
+                  '°C',
+                  Colors.red[700]!,
+                ),
+              ],
+            ),
+            const SizedBox(height: 20),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: [
+                _buildAnimatedBox(
+                  'Max Humidity',
+                  maxHumidity,
+                  '%',
+                  Colors.blue[700]!,
+                ),
+                _buildAnimatedBox(
+                  'Min Humidity',
+                  minHumidity,
+                  '%',
+                  Colors.blue[700]!,
+                ),
+              ],
+            ),
+            const SizedBox(height: 20),
           ],
         ),
       ),
@@ -228,8 +306,8 @@ class _HomePageState extends State<HomePage> {
             label: 'Home',
           ),
           BottomNavigationBarItem(
-            icon: Icon(Icons.settings),
-            label: 'Settings',
+            icon: Icon(Icons.graphic_eq),
+            label: 'Graphs',
           ),
           BottomNavigationBarItem(
             icon: Icon(Icons.power_settings_new),
@@ -239,6 +317,40 @@ class _HomePageState extends State<HomePage> {
         currentIndex: _selectedIndex,
         selectedItemColor: Colors.green[700],
         onTap: _onItemTapped,
+      ),
+    );
+  }
+
+  // Widget for animated dashboard box
+  Widget _buildAnimatedBox(String title, double value, String unit, Color color) {
+    return AnimatedContainer(
+      duration: const Duration(seconds: 1),
+      curve: Curves.easeInOut,
+      padding: const EdgeInsets.all(16.0),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.5),
+        borderRadius: BorderRadius.circular(10),
+        boxShadow: const [
+          BoxShadow(
+            color: Colors.black12,
+            blurRadius: 10,
+          ),
+        ],
+      ),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Text(
+            '$title',
+            style: TextStyle(fontSize: 18, color: color),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            '${value.toStringAsFixed(2)} $unit',
+            style: TextStyle(
+                fontSize: 28, fontWeight: FontWeight.bold, color: color),
+          ),
+        ],
       ),
     );
   }

@@ -32,6 +32,11 @@ dependencies:
     sdk: flutter
   http: ^0.13.5  # Use the latest version available
   fl_chart: ^0.40.0
+  intl: ^0.18.0 # Add this line for the intl package
+  shared_preferences: ^2.0.13  # check for the latest version
+
+
+
 
 
 
