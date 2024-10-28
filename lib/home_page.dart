@@ -1,6 +1,8 @@
+import 'package:agri_iot_app/services/models/api_response.dart';
+import 'package:agri_iot_app/services/ui_helper.dart';
 import 'package:flutter/material.dart';
 import 'dart:async';
-import 'package:shared_preferences/shared_preferences.dart'; // Import shared_preferences
+import 'package:shared_preferences/shared_preferences.dart';
 import 'services/thingspeak_service.dart';
 import 'models/temperature_humidity.dart';
 import 'control_page.dart';
@@ -15,21 +17,32 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
+  // late Future<List<Map<String, dynamic>>> _data;
+  // final ThingSpeakService _thingSpeakService = ThingSpeakService();
   late ThingSpeakService _thingSpeakService;
-  List<TemperatureHumidity> _dataList = []; // Changed from final to allow modification
+  List<TemperatureHumidity> _dataList = [];
+  // List<TemperatureHumidity> _filteredDataList = [];
   bool _isLoading = true;
   int _selectedIndex = 0;
+
+  DateTime? _startDate;
+  DateTime? _endDate;
 
   @override
   void initState() {
     super.initState();
+    // _data = _thingSpeakService.fetchData();
+
     _thingSpeakService = ThingSpeakService(
-      channelId: '2342037',
-      readApiKey: 'FTZ54ZF6G1J1BDPY',
+      channelId: '2554592',
+      readApiKey: 'BYQJAPB6IBLM48MX',
     );
-    _loadData(); // Load saved data
+    _loadData();
     _fetchData();
     Timer.periodic(const Duration(seconds: 30), (timer) => _fetchData());
+    // _loadData();
+    // _fetchData();
+    // Timer.periodic(const Duration(seconds: 30), (timer)=> _fetchData());
   }
 
   Future<void> _loadData() async {
@@ -37,44 +50,54 @@ class _HomePageState extends State<HomePage> {
     List<String>? savedData = prefs.getStringList('temperature_humidity_data');
 
     if (savedData != null) {
-      _dataList = savedData
-          .map((data) {
+      _dataList = savedData.map((data) {
         final parts = data.split(',');
         return TemperatureHumidity(
           temperature: double.parse(parts[0]),
           humidity: double.parse(parts[1]),
           timestamp: DateTime.parse(parts[2]),
         );
-      })
-          .toList();
+      }).toList();
     }
 
     setState(() {
-      _isLoading = false; // Set loading to false after loading data
+      _isLoading = false;
+      // _applyFilter();
     });
   }
 
   Future<void> _fetchData() async {
     try {
-      final data = await _thingSpeakService.fetchData();
-      TemperatureHumidity newEntry = TemperatureHumidity(
-        temperature: data['temperature'],
-        humidity: data['humidity'],
-        timestamp: DateTime.now(),
-      );
+      final response = await _thingSpeakService.fetchData();
 
-      setState(() {
-        _dataList.add(newEntry);
-        _isLoading = false;
-      });
+      if (response.status == ResponseStatus.success) {
+        TemperatureHumidity newEntry = TemperatureHumidity(
+          temperature: double.tryParse(response.data.feeds?.lastOrNull?.field1 ?? "0.0") ?? 0.0,
+          humidity: double.tryParse(response.data.feeds?.lastOrNull?.field2 ?? "0.0") ?? 0.0,
+          timestamp: DateTime.now(),
+        );
 
-      // Save the updated data list to SharedPreferences
-      _saveData();
+        setState(() {
+          _dataList.add(newEntry);
+          _isLoading = false;
+          // _applyFilter(); // Apply filter after fetching new data
+        });
+
+        _saveData();
+
+        UiHelper.showSnackbar(context, message: "${_dataList.lastOrNull?.toJson()}");
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("${response.message ?? "Data was not fetched"}"),
+          ),
+        );
+      }
     } catch (e) {
       setState(() {
         _isLoading = false;
       });
-      print('Error fetching data: $e');
+      print('Error fetching data on home: $e');
     }
   }
 
@@ -85,6 +108,21 @@ class _HomePageState extends State<HomePage> {
     }).toList();
     await prefs.setStringList('temperature_humidity_data', dataToSave);
   }
+
+  // Apply date filter to data
+  // void _applyFilter() {
+  //   setState(() {
+  //     _filteredDataList = _dataList.where((entry) {
+  //       if (_startDate != null && entry.timestamp.isBefore(_startDate!)) {
+  //         return false;
+  //       }
+  //       if (_endDate != null && entry.timestamp.isAfter(_endDate!)) {
+  //         return false;
+  //       }
+  //       return true;
+  //     }).toList();
+  //   });
+  // }
 
   void _onItemTapped(int index) {
     setState(() {
@@ -112,7 +150,10 @@ class _HomePageState extends State<HomePage> {
   // Function to calculate average temperature and humidity
   double _calculateAverage(List<TemperatureHumidity> data, bool isTemperature) {
     if (data.isEmpty) return 0.0;
-    double total = data.fold(0, (sum, item) => sum + (isTemperature ? item.temperature : item.humidity));
+    double total = data.fold(
+        0,
+        (sum, item) =>
+            sum + (isTemperature ? item.temperature : item.humidity));
     return total / data.length;
   }
 
@@ -145,6 +186,25 @@ class _HomePageState extends State<HomePage> {
       appBar: AppBar(
         title: const Text('Agri-IoT Farm'),
         backgroundColor: Colors.green,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.calendar_today),
+            onPressed: () async {
+              final DateTimeRange? picked = await showDateRangePicker(
+                context: context,
+                firstDate: DateTime(2000),
+                lastDate: DateTime.now(),
+              );
+              if (picked != null) {
+                setState(() {
+                  _startDate = picked.start;
+                  _endDate = picked.end;
+                  // _applyFilter(); // Apply filter on date selection
+                });
+              }
+            },
+          ),
+        ],
       ),
       drawer: Drawer(
         child: ListView(
@@ -221,83 +281,86 @@ class _HomePageState extends State<HomePage> {
         child: _isLoading
             ? const CircularProgressIndicator()
             : Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: <Widget>[
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-              children: [
-                _buildAnimatedBox(
-                  'Temperature',
-                  _dataList.isNotEmpty ? _dataList.last.temperature : 0,
-                  '°C',
-                  Colors.green[700]!,
-                ),
-                _buildAnimatedBox(
-                  'Humidity',
-                  _dataList.isNotEmpty ? _dataList.last.humidity : 0,
-                  '%',
-                  Colors.blue[700]!,
-                ),
-              ],
-            ),
-            const SizedBox(height: 20),
-            // Display average, max, and min values in animated boxes
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-              children: [
-                _buildAnimatedBox(
-                  'Avg Temp',
-                  averageTemperature,
-                  '°C',
-                  Colors.orange[700]!,
-                ),
-                _buildAnimatedBox(
-                  'Avg Humidity',
-                  averageHumidity,
-                  '%',
-                  Colors.orange[700]!,
-                ),
-              ],
-            ),
-            const SizedBox(height: 20),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-              children: [
-                _buildAnimatedBox(
-                  'Max Temp',
-                  maxTemperature,
-                  '°C',
-                  Colors.red[700]!,
-                ),
-                _buildAnimatedBox(
-                  'Min Temp',
-                  minTemperature,
-                  '°C',
-                  Colors.red[700]!,
-                ),
-              ],
-            ),
-            const SizedBox(height: 20),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-              children: [
-                _buildAnimatedBox(
-                  'Max Humidity',
-                  maxHumidity,
-                  '%',
-                  Colors.blue[700]!,
-                ),
-                _buildAnimatedBox(
-                  'Min Humidity',
-                  minHumidity,
-                  '%',
-                  Colors.blue[700]!,
-                ),
-              ],
-            ),
-            const SizedBox(height: 20),
-          ],
-        ),
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: <Widget>[
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                    children: [
+                      _buildAnimatedBox(
+                        'Temperature',
+                        _dataList.isNotEmpty
+                            ? _dataList.last.temperature
+                            : 0,
+                        '°C',
+                        Colors.green[900]!,
+                      ),
+                      _buildAnimatedBox(
+                        'Humidity',
+                        _dataList.isNotEmpty
+                            ? _dataList.last.humidity
+                            : 0,
+                        '%',
+                        Colors.blue[900]!,
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 20),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                    children: [
+                      _buildAnimatedBox(
+                        'Avg Temp',
+                        averageTemperature,
+                        '°C',
+                        Colors.orange[900]!,
+                      ),
+                      _buildAnimatedBox(
+                        'Avg Humidity',
+                        averageHumidity,
+                        '%',
+                        Colors.orange[900]!,
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 20),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                    children: [
+                      _buildAnimatedBox(
+                        'Max Temp',
+                        maxTemperature,
+                        '°C',
+                        Colors.red[900]!,
+                      ),
+                      _buildAnimatedBox(
+                        'Min Temp',
+                        minTemperature,
+                        '°C',
+                        Colors.red[900]!,
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 20),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                    children: [
+                      _buildAnimatedBox(
+                        'Max Humidity',
+                        maxHumidity,
+                        '%',
+                        Colors.blue[900]!,
+                      ),
+                      _buildAnimatedBox(
+                        'Min Humidity',
+                        minHumidity,
+                        '%',
+                        Colors.blue[900]!,
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 20),
+                ],
+              ),
       ),
       bottomNavigationBar: BottomNavigationBar(
         items: const <BottomNavigationBarItem>[
@@ -322,7 +385,8 @@ class _HomePageState extends State<HomePage> {
   }
 
   // Widget for animated dashboard box
-  Widget _buildAnimatedBox(String title, double value, String unit, Color color) {
+  Widget _buildAnimatedBox(
+      String title, double value, String unit, Color color) {
     return AnimatedContainer(
       duration: const Duration(seconds: 1),
       curve: Curves.easeInOut,
